@@ -1,5 +1,5 @@
 import { Link, Outlet } from "react-router-dom"
-import { LayoutDashboard, History, Settings, Zap } from "lucide-react"
+import { LayoutDashboard, History, Settings, Zap, TrendingUp, AlertCircle } from "lucide-react"
 
 export default function Layout() {
   return (
@@ -20,6 +20,14 @@ export default function Layout() {
             <Link to="/history" className="flex items-center gap-2 font-bold hover:underline decoration-4 underline-offset-4 decoration-primary">
               <History className="h-5 w-5" />
               <span className="hidden sm:inline">History</span>
+            </Link>
+            <Link to="/analytics" className="flex items-center gap-2 font-bold hover:underline decoration-4 underline-offset-4 decoration-primary">
+              <TrendingUp className="h-5 w-5" />
+              <span className="hidden sm:inline">Analytics</span>
+            </Link>
+             <Link to="/alerts" className="flex items-center gap-2 font-bold hover:underline decoration-4 underline-offset-4 decoration-primary">
+              <AlertCircle className="h-5 w-5" />
+              <span className="hidden sm:inline">Alerts</span>
             </Link>
              <Link to="/settings" className="flex items-center gap-2 font-bold hover:underline decoration-4 underline-offset-4 decoration-primary">
               <Settings className="h-5 w-5" />

@@ -17,11 +17,18 @@ const UserSchema = new mongoose.Schema({
   },
   budgetLimit: {
     type: Number,
-    default: 50 // Standard daily budget in currency units
+    default: 50
   },
   createdAt: {
     type: Date,
     default: Date.now
+  },
+  billDueDate: {
+    type: Date
+  },
+  providerName: {
+    type: String,
+    default: "National Grid"
   }
 });
 

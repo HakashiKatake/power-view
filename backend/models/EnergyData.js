@@ -19,7 +19,7 @@ const EnergyDataSchema = new mongoose.Schema({
         required: true
     },
     voltage: {
-        type: Number, // Simulated voltage (e.g., 220-240V)
+        type: Number,
         default: 230
     }
 }, {

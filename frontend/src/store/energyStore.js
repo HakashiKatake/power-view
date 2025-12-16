@@ -10,8 +10,26 @@ export const useEnergyStore = create((set, get) => ({
     isConnected: false,
     budgetExceeded: false,
 
-    connectSocket: () => {
+    connectSocket: (userId) => {
         if (get().socket) return;
+        if (!userId) return; // Need user ID to filter events
+
+        // Fetch initial history
+        fetch(`${SOCKET_URL}/api/energy/history`, {
+            headers: { 'x-auth-token': localStorage.getItem('token') }
+        })
+            .then(res => res.json())
+            .then(data => {
+                if (Array.isArray(data)) {
+                    set({ history: data });
+                    // Set current reading to last history item if exists
+                    if (data.length > 0) {
+                        const last = data[data.length - 1];
+                        set({ currReading: { consumptionKwh: last.consumptionKwh, cost: last.cost, voltage: last.voltage } });
+                    }
+                }
+            })
+            .catch(err => console.error("Failed to fetch history:", err));
 
         const socket = io(SOCKET_URL);
 
@@ -25,6 +43,9 @@ export const useEnergyStore = create((set, get) => ({
         });
 
         socket.on('energy-update', (data) => {
+            // Filter: Only process data for this user
+            if (data.userId && data.userId !== userId) return;
+
             const { consumptionKwh, cost, voltage, timestamp } = data;
 
             // Update current reading and add to history (keep last 50 points)

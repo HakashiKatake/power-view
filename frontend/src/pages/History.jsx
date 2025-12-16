@@ -1,6 +1,7 @@
 import { Card, CardHeader, CardTitle, CardContent } from "../components/ui/card"
 import { useEnergyStore } from "../store/energyStore"
-import { Database, TrendingUp, DollarSign } from "lucide-react"
+import { Database, TrendingUp, DollarSign, Download } from "lucide-react"
+import { Button } from "../components/ui/button"
 
 export default function History() {
   const { history } = useEnergyStore()
@@ -53,9 +54,33 @@ export default function History() {
 
        <Card className="border-4 border-black shadow-[8px_8px_0px_0px_rgba(0,0,0,1)]">
          <CardHeader>
-            <CardTitle className="font-black uppercase">Recent Readings Log</CardTitle>
+            <CardTitle>Recent Readings Card</CardTitle>
          </CardHeader>
          <CardContent>
+            <div className="flex justify-end mb-4">
+                <Button 
+                    onClick={() => {
+                        if (history.length === 0) return;
+                        
+                        const headers = ["Timestamp,Load (kW),Cost ($),Voltage (V)"];
+                        const rows = history.map(h => 
+                            `${new Date(h.timestamp).toISOString()},${h.consumptionKwh},${h.cost},${h.voltage}`
+                        );
+                        
+                        const csvContent = "data:text/csv;charset=utf-8," + [headers, ...rows].join("\n");
+                        const encodedUri = encodeURI(csvContent);
+                        const link = document.createElement("a");
+                        link.setAttribute("href", encodedUri);
+                        link.setAttribute("download", "energy_history.csv");
+                        document.body.appendChild(link);
+                        link.click();
+                        document.body.removeChild(link);
+                    }}
+                    className="font-bold border-2 border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] hover:shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] hover:translate-x-[2px] hover:translate-y-[2px] active:shadow-none active:translate-x-[4px] active:translate-y-[4px] transition-all bg-green-400 text-black hover:bg-green-500"
+                >
+                    <Download className="mr-2 h-4 w-4" /> Export CSV
+                </Button>
+            </div>
             {history.length === 0 ? (
                 <div className="text-center py-10 font-bold text-gray-500">
                     No history data available yet. Connect to the simulation to start tracking.

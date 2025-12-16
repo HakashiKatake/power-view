@@ -1,7 +1,7 @@
-import { useEffect } from "react"
+import { useEffect, useState } from "react"
 import { useEnergyStore } from "../store/energyStore"
 import { Card, CardContent, CardHeader, CardTitle } from "../components/ui/card"
-import { Line } from "react-chartjs-2"
+import { Line, Doughnut } from "react-chartjs-2"
 import {
   Chart as ChartJS,
   CategoryScale,
@@ -11,9 +11,10 @@ import {
   Title,
   Tooltip,
   Legend,
-  Filler
+  Filler,
+  ArcElement
 } from 'chart.js'
-import { Zap, Wallet, AlertTriangle } from "lucide-react"
+import { Zap, Wallet, AlertTriangle, PieChart, Clock } from "lucide-react"
 import Gauge from "../components/Gauge"
 import { useAuthStore } from "../store/authStore"
 import { Button } from "../components/ui/button"
@@ -24,6 +25,7 @@ ChartJS.register(
   LinearScale,
   PointElement,
   LineElement,
+  ArcElement,
   Title,
   Tooltip,
   Legend,
@@ -33,36 +35,73 @@ ChartJS.register(
 export default function Dashboard() {
   const { connectSocket, disconnectSocket, currReading, history, isConnected } = useEnergyStore()
   const { user, logout } = useAuthStore()
+  const [currentTime, setCurrentTime] = useState(new Date())
 
   useEffect(() => {
-    connectSocket()
-    return () => disconnectSocket()
-  }, [])
+    // Only connect if we have a valid user ID (MongoDB uses _id)
+    const userId = user?._id || user?.id;
+    if (userId) {
+        connectSocket(userId)
+    }
+    const timer = setInterval(() => setCurrentTime(new Date()), 60000) 
+    return () => {
+        disconnectSocket()
+        clearInterval(timer)
+    }
+    // Use userId in dependency to avoid re-connecting on other user object changes
+  }, [user?._id, user?.id]) 
+
 
   const latestLoad = currReading.consumptionKwh
   const dailyCost = (latestLoad * 24 * 0.15).toFixed(2)
   const budgetLimit = user?.budgetLimit || 50
   
+  // Peak Hours Logic (Example: 5PM - 9PM)
+  const currentHour = currentTime.getHours()
+  const isPeakHours = currentHour >= 17 && currentHour < 21
+
   // Calculate status
   const isOverBudget = parseFloat(dailyCost) > budgetLimit
-  const loadPercentage = (latestLoad / 5) * 100 // assuming 5kW max for gauge
+  const loadPercentage = (latestLoad / 5) * 100 
 
-  // Calculate average from history or fallback
   const avgLoad = history.length > 0 
     ? history.reduce((acc, curr) => acc + curr.consumptionKwh, 0) / history.length
     : 1.5;
 
   const usageDiff = avgLoad ? ((latestLoad - avgLoad) / avgLoad) * 100 : 0
   
-  // Prepare Chart Data
-  const chartData = {
+  // Simulated Breakdown Data based on Load
+  // In a real app, this would come from smart plugs or AI disaggregation
+  const breakdownData = {
+    labels: ['HVAC', 'Lighting', 'Appliances', 'Always On'],
+    datasets: [
+      {
+        data: [
+            latestLoad * 0.45, // HVAC usually highest
+            latestLoad * 0.15, 
+            latestLoad * 0.25, 
+            latestLoad * 0.15
+        ],
+        backgroundColor: [
+          '#FF6B6B', // Red
+          '#4ECDC4', // Teal
+          '#FFE66D', // Yellow
+          '#1A535C'  // Dark Blue
+        ],
+        borderColor: 'black',
+        borderWidth: 2,
+      },
+    ],
+  };
+
+  const lineChartData = {
     labels: history.map(h => new Date(h.timestamp).toLocaleTimeString()),
     datasets: [
       {
         label: 'Power Draw (kW)',
         data: history.map(h => h.consumptionKwh),
         borderColor: 'black',
-        backgroundColor: 'rgba(255, 200, 0, 0.5)', 
+        backgroundColor: isPeakHours ? 'rgba(255, 99, 132, 0.5)' : 'rgba(255, 200, 0, 0.5)', 
         borderWidth: 3,
         pointBackgroundColor: 'white',
         pointBorderColor: 'black',
@@ -108,12 +147,27 @@ export default function Dashboard() {
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
         <div>
            <h1 className="text-4xl font-black uppercase tracking-tighter">Live Monitor</h1>
-           <p className="text-muted-foreground font-medium">
-             Welcome back, <span className="text-black font-bold">{user?.username}</span>. 
-           </p>
+           <div className="flex items-center gap-2">
+                <span className="text-muted-foreground font-medium">
+                    Hello, <span className="text-black font-bold">{user?.username}</span>
+                </span>
+                {isPeakHours && (
+                    <span className="bg-red-500 text-white text-xs font-black uppercase px-2 py-1 border-2 border-black -skew-x-12 animate-pulse">
+                        Peak Pricing Active
+                    </span>
+                )}
+           </div>
         </div>
         
         <div className="flex items-center gap-4">
+             {user?.billDueDate && (
+                 <div className="hidden md:flex flex-col items-end mr-4 animate-in slide-in-from-right duration-500">
+                    <span className="text-xs font-black uppercase text-muted-foreground">Next Bill Due</span>
+                     <span className="text-lg font-black text-red-500 bg-red-100 px-2 border-2 border-red-500 -skew-x-12">
+                        {new Date(user.billDueDate).toLocaleDateString()}
+                    </span>
+                 </div>
+             )}
              <div className="flex items-center gap-2">
                 <div className={`h-4 w-4 rounded-full border-2 border-black ${isConnected ? 'bg-green-400' : 'bg-red-500 animate-pulse'}`}></div>
                 <span className="hidden sm:inline font-bold text-sm uppercase">{isConnected ? 'System Online' : 'Connecting...'}</span>
@@ -125,10 +179,10 @@ export default function Dashboard() {
         </div>
       </div>
 
-      {/* KPI Cards */}
+      {/* KPI Cards Row 1 */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         {/* Voltage/Load Card with Gauge */}
-        <Card className="bg-blue-200 border-4 border-black shadow-[8px_8px_0px_0px_rgba(0,0,0,1)]">
+        <Card className="bg-blue-200 border-4 border-black shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] hover:translate-x-[2px] hover:translate-y-[2px] hover:shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] transition-all">
            <CardHeader className="flex flex-row items-center justify-between pb-2">
              <CardTitle className="text-sm font-black uppercase">Real-Time Load</CardTitle>
              <Zap className="h-6 w-6 stroke-black fill-white" />
@@ -143,7 +197,7 @@ export default function Dashboard() {
         </Card>
 
         {/* Cost & Budget Comparison Card */}
-        <Card className="bg-green-200 border-4 border-black shadow-[8px_8px_0px_0px_rgba(0,0,0,1)]">
+        <Card className="bg-green-200 border-4 border-black shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] hover:translate-x-[2px] hover:translate-y-[2px] hover:shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] transition-all">
            <CardHeader className="flex flex-row items-center justify-between pb-2">
              <CardTitle className="text-sm font-black uppercase">Cost Analysis</CardTitle>
              <Wallet className="h-6 w-6 stroke-black fill-white" />
@@ -171,7 +225,7 @@ export default function Dashboard() {
         </Card>
 
          {/* Usage Trend / Comparison Card */}
-        <Card className={`${isOverBudget ? "bg-red-300" : "bg-yellow-200"} border-4 border-black shadow-[8px_8px_0px_0px_rgba(0,0,0,1)]`}>
+        <Card className={`${isOverBudget ? "bg-red-300" : "bg-yellow-200"} border-4 border-black shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] hover:translate-x-[2px] hover:translate-y-[2px] hover:shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] transition-all`}>
            <CardHeader className="flex flex-row items-center justify-between pb-2">
              <CardTitle className="text-sm font-black uppercase">Usage Insights</CardTitle>
              <AlertTriangle className="h-6 w-6 stroke-black fill-white" />
@@ -203,15 +257,42 @@ export default function Dashboard() {
         </Card>
       </div>
 
-      {/* Main Chart */}
-      <Card className="border-4 border-black shadow-[8px_8px_0px_0px_rgba(0,0,0,1)]">
-         <CardHeader>
-             <CardTitle className="font-black uppercase">Real-Time Power Usage Trend</CardTitle>
-         </CardHeader>
-         <CardContent className="h-[400px]">
-             <Line data={chartData} options={chartOptions} />
-         </CardContent>
-      </Card>
+        {/* Row 2: Charts */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            {/* Main Trend Chart */}
+            <Card className="md:col-span-2 border-4 border-black shadow-[8px_8px_0px_0px_rgba(0,0,0,1)]">
+                <CardHeader className="flex flex-row items-center justify-between">
+                    <CardTitle className="font-black uppercase">Real-Time Power Trend</CardTitle>
+                    {isPeakHours && <span className="text-red-500 font-bold text-sm uppercase animate-pulse flex items-center gap-1"><Clock className="h-4 w-4"/> Peak Hrs</span>}
+                </CardHeader>
+                <CardContent className="h-[300px]">
+                    <Line data={lineChartData} options={chartOptions} />
+                </CardContent>
+            </Card>
+
+            {/* Estimated Breakdown Chart */}
+            <Card className="border-4 border-black shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] bg-violet-200">
+                <CardHeader>
+                    <CardTitle className="font-black uppercase flex items-center gap-2">
+                        <PieChart className="h-5 w-5"/> Est. Breakdown
+                    </CardTitle>
+                </CardHeader>
+                <CardContent className="h-[300px] flex flex-col items-center justify-center p-2">
+                     <div className="w-[80%] h-[80%]">
+                        <Doughnut 
+                            data={breakdownData} 
+                            options={{
+                                plugins: { legend: { position: 'bottom', labels: { font: { weight: 'bold', family: 'sans-serif' }, color: 'black' } } },
+                                cutout: '60%',
+                                responsive: true,
+                                maintainAspectRatio: false
+                            }} 
+                        />
+                     </div>
+                     <p className="text-xs font-bold text-center mt-2 text-muted-foreground">AI-Estimated Usage Distribution</p>
+                </CardContent>
+            </Card>
+      </div>
     </div>
   )
 }

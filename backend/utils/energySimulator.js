@@ -29,24 +29,44 @@ const generateReading = () => {
     };
 };
 
+const User = require('../models/User');
+
 const startSimulation = (io) => {
     console.log('Starting Energy Simulation Stream...');
 
-    setInterval(() => {
-        const reading = generateReading();
-        const timestamp = new Date();
+    setInterval(async () => {
+        try {
+            // Get all users to simulate data for each
+            const users = await User.find({});
 
-        // Emit to all connected clients
-        io.emit('energy-update', {
-            ...reading,
-            timestamp
-        });
+            for (const user of users) {
+                const reading = generateReading();
+                const timestamp = new Date();
 
-        // NOTE: In a production app, we might not save EVERY second to DB to save space,
-        // maybe aggregate or save once every minute. 
-        // For this demo, let's save every 10th reading or just don't save DB here automatically 
-        // to avoid filling it up during development unless requested.
-        // We will implement a separate "History Saver" if needed.
+                // Save to DB
+                // Only save every 5th reading to avoid DB spam in this demo (every 10s)
+                // Or just save all since we likely have few users. Let's save all for better "history" feel.
+                const energyEntry = new EnergyData({
+                    user: user._id,
+                    consumptionKwh: reading.consumptionKwh,
+                    cost: reading.cost,
+                    voltage: reading.voltage,
+                    timestamp
+                });
+
+                await energyEntry.save();
+
+                // Emit to all connected clients
+                // We verify userId on the frontend to only update the relevant dashboard
+                io.emit('energy-update', {
+                    ...reading,
+                    timestamp,
+                    userId: user._id
+                });
+            }
+        } catch (err) {
+            console.error("Simulation Error:", err);
+        }
 
     }, 2000); // Update every 2 seconds
 };

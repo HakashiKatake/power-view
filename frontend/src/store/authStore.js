@@ -65,24 +65,22 @@ export const useAuthStore = create((set, get) => ({
         set({ user: null, isAuthenticated: false });
     },
 
-    updateBudget: async (newLimit) => {
+    updateSettings: async (updates) => {
         try {
             // Optimistic update
             set((state) => ({
-                user: { ...state.user, budgetLimit: newLimit }
+                user: { ...state.user, ...updates }
             }));
 
             const token = localStorage.getItem('token');
-            // Assuming the user routes are under /api/user, based on server.js
             await axios.put(`${BASE_URL}/api/user/settings`,
-                { budgetLimit: newLimit },
+                updates,
                 { headers: { 'x-auth-token': token } }
             );
             return true;
         } catch (err) {
-            console.error('Failed to update budget settings:', err);
+            console.error('Failed to update settings:', err);
             return false;
         }
     }
 }));
-
