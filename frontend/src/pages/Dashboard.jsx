@@ -14,6 +14,9 @@ import {
   Filler
 } from 'chart.js'
 import { Zap, Wallet, AlertTriangle } from "lucide-react"
+import Gauge from "../components/Gauge"
+import { useAuthStore } from "../store/authStore"
+import { Button } from "../components/ui/button"
 
 // Register ChartJS
 ChartJS.register(
@@ -26,8 +29,6 @@ ChartJS.register(
   Legend,
   Filler
 )
-import { useAuthStore } from "../store/authStore"
-import { Button } from "../components/ui/button"
 
 export default function Dashboard() {
   const { connectSocket, disconnectSocket, currReading, history, isConnected } = useEnergyStore()
@@ -39,7 +40,19 @@ export default function Dashboard() {
   }, [])
 
   const latestLoad = currReading.consumptionKwh
-  const dailyCost = (latestLoad * 24 * 0.15).toFixed(2) 
+  const dailyCost = (latestLoad * 24 * 0.15).toFixed(2)
+  const budgetLimit = user?.budgetLimit || 50
+  
+  // Calculate status
+  const isOverBudget = parseFloat(dailyCost) > budgetLimit
+  const loadPercentage = (latestLoad / 5) * 100 // assuming 5kW max for gauge
+
+  // Calculate average from history or fallback
+  const avgLoad = history.length > 0 
+    ? history.reduce((acc, curr) => acc + curr.consumptionKwh, 0) / history.length
+    : 1.5;
+
+  const usageDiff = avgLoad ? ((latestLoad - avgLoad) / avgLoad) * 100 : 0
   
   // Prepare Chart Data
   const chartData = {
@@ -106,7 +119,7 @@ export default function Dashboard() {
                 <span className="hidden sm:inline font-bold text-sm uppercase">{isConnected ? 'System Online' : 'Connecting...'}</span>
              </div>
              
-             <Button variant="destructive" onClick={logout} className="font-bold border-2 border-black">
+             <Button variant="destructive" onClick={logout} className="font-bold border-2 border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] hover:shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] hover:translate-x-[2px] hover:translate-y-[2px] transition-all">
                 Logout
              </Button>
         </div>
@@ -114,47 +127,86 @@ export default function Dashboard() {
 
       {/* KPI Cards */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        {/* Voltage/Load Card */}
-        <Card className="bg-blue-200">
+        {/* Voltage/Load Card with Gauge */}
+        <Card className="bg-blue-200 border-4 border-black shadow-[8px_8px_0px_0px_rgba(0,0,0,1)]">
            <CardHeader className="flex flex-row items-center justify-between pb-2">
-             <CardTitle className="text-sm font-black uppercase">Current Load</CardTitle>
+             <CardTitle className="text-sm font-black uppercase">Real-Time Load</CardTitle>
              <Zap className="h-6 w-6 stroke-black fill-white" />
            </CardHeader>
-           <CardContent>
-             <div className="text-5xl font-black tracking-tighter">{latestLoad.toFixed(2)} <span className="text-xl">kW</span></div>
-             <p className="text-xs font-bold mt-2">Voltage: {currReading.voltage} V</p>
+           <CardContent className="flex flex-col items-center">
+             <Gauge value={latestLoad} max={5} label="Current Draw" unit="kW" />
+             <div className="w-full mt-4 flex justify-between text-xs font-bold border-t-2 border-black pt-2">
+                <span>Voltage: {currReading.voltage.toFixed(0)}V</span>
+                <span>{loadPercentage.toFixed(0)}% Cap</span>
+             </div>
            </CardContent>
         </Card>
 
-        {/* Cost Card */}
-        <Card className="bg-green-200">
+        {/* Cost & Budget Comparison Card */}
+        <Card className="bg-green-200 border-4 border-black shadow-[8px_8px_0px_0px_rgba(0,0,0,1)]">
            <CardHeader className="flex flex-row items-center justify-between pb-2">
-             <CardTitle className="text-sm font-black uppercase">Proj. Daily Cost</CardTitle>
+             <CardTitle className="text-sm font-black uppercase">Cost Analysis</CardTitle>
              <Wallet className="h-6 w-6 stroke-black fill-white" />
            </CardHeader>
            <CardContent>
-             <div className="text-5xl font-black tracking-tighter">${dailyCost}</div>
-             <p className="text-xs font-bold mt-2">Rate: $0.15 / kWh</p>
+             <div className="text-5xl font-black tracking-tighter mb-2">${dailyCost}</div>
+             <p className="text-xs font-bold uppercase mb-4">Projected Daily Cost</p>
+             
+             <div className="bg-white border-2 border-black p-3 space-y-2">
+                <div className="flex justify-between text-sm font-bold">
+                    <span>Budget Limit:</span>
+                    <span>${budgetLimit}</span>
+                </div>
+                <div className="w-full bg-gray-200 h-3 border-2 border-black rounded-full overflow-hidden">
+                    <div 
+                        className={`h-full ${isOverBudget ? 'bg-red-500' : 'bg-green-500'}`} 
+                        style={{ width: `${Math.min((parseFloat(dailyCost) / budgetLimit) * 100, 100)}%` }}
+                    ></div>
+                </div>
+                <div className="text-xs font-bold text-center">
+                    {isOverBudget ? "Budget Exceeded!" : "Within Budget"}
+                </div>
+             </div>
            </CardContent>
         </Card>
 
-         {/* Alert Card */}
-        <Card className={latestLoad > 2.0 ? "bg-red-400 animate-pulse" : "bg-white"}>
+         {/* Usage Trend / Comparison Card */}
+        <Card className={`${isOverBudget ? "bg-red-300" : "bg-yellow-200"} border-4 border-black shadow-[8px_8px_0px_0px_rgba(0,0,0,1)]`}>
            <CardHeader className="flex flex-row items-center justify-between pb-2">
-             <CardTitle className="text-sm font-black uppercase">System Status</CardTitle>
+             <CardTitle className="text-sm font-black uppercase">Usage Insights</CardTitle>
              <AlertTriangle className="h-6 w-6 stroke-black fill-white" />
            </CardHeader>
            <CardContent>
-             <div className="text-2xl font-black uppercase">{latestLoad > 2.0 ? "OVERLOAD DETECTED" : "Normal Operation"}</div>
-             <p className="text-xs font-bold mt-2">{latestLoad > 2.0 ? "Usage limits exceeded!" : "Within budget parameters."}</p>
+             <div className="mb-4">
+                 <div className="text-4xl font-black">{Math.abs(usageDiff).toFixed(1)}%</div>
+                 <div className="text-sm font-bold uppercase">
+                    {usageDiff > 0 ? "Higher" : "Lower"} than Avg
+                 </div>
+             </div>
+             
+             <div className="space-y-2 text-sm font-bold border-t-2 border-black pt-2">
+                 <div className="flex justify-between">
+                     <span>Current Load:</span>
+                     <span>{latestLoad.toFixed(2)} kW</span>
+                 </div>
+                 <div className="flex justify-between text-muted-foreground">
+                     <span>Avg Load:</span>
+                     <span>{avgLoad.toFixed(2)} kW</span>
+                 </div>
+                 {isOverBudget && (
+                     <div className="mt-2 text-red-600 bg-white border-2 border-black p-2 text-center animate-pulse">
+                         WARNING: COST OVERRUN
+                     </div>
+                 )}
+             </div>
            </CardContent>
         </Card>
       </div>
 
       {/* Main Chart */}
-      <Card className="border-4 shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] hover:shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] hover:translate-x-0 hover:translate-y-0">
+      <Card className="border-4 border-black shadow-[8px_8px_0px_0px_rgba(0,0,0,1)]">
          <CardHeader>
-             <CardTitle>Real-Time Power Usage Trend</CardTitle>
+             <CardTitle className="font-black uppercase">Real-Time Power Usage Trend</CardTitle>
          </CardHeader>
          <CardContent className="h-[400px]">
              <Line data={chartData} options={chartOptions} />
